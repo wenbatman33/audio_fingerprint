@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>裝置音訊識別碼檢測器</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .fade-enter-active, .fade-leave-active {
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .fade-enter-from, .fade-leave-to {
+            opacity: 0;
+            transform: translate(-50%, 20px);
+        }
+    </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 min-h-screen flex items-center justify-center p-4">
+
+<div id="app" class="w-full">
+    <div class="p-6 max-w-2xl mx-auto bg-white dark:bg-slate-800 rounded-xl shadow-md space-y-6 border border-slate-200 dark:border-slate-700">
+        <!-- 標題區域 -->
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-indigo-100 dark:bg-indigo-900 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900 dark:text-white">裝置音訊識別碼</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Audio Hardware Identity (2026)</p>
+                </div>
+            </div>
+            <div v-if="loading" class="animate-spin h-5 w-5 border-2 border-indigo-500 border-t-transparent rounded-full"></div>
+        </div>
+
+        <!-- ID 顯示區域 -->
+        <div class="relative group">
+            <div class="bg-slate-50 dark:bg-slate-900 p-6 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:border-indigo-300 dark:group-hover:border-indigo-700">
+                <div v-if="loading" class="flex flex-col items-center py-4">
+                    <span class="text-sm text-indigo-500 animate-pulse font-medium">正在採樣硬體聲學特徵...</span>
+                </div>
+                <div v-else-if="fingerprint" class="flex flex-col items-center space-y-4">
+                    <span class="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Your Device Fingerprint</span>
+                    <code class="text-2xl md:text-3xl font-black text-indigo-600 dark:text-indigo-400 tracking-wider">
+                        {{ fingerprint }}
+                    </code>
+                    <div class="flex space-x-2">
+                        <button 
+                            @click="copyToClipboard" 
+                            class="flex items-center space-x-1 px-3 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-full text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            <span>{{ copyStatus }}</span>
+                        </button>
+                    </div>
+                </div>
+                <div v-else class="py-4 text-center text-red-500 text-sm">
+                    未能識別音訊硬體，請檢查瀏覽器權限。
+                </div>
+            </div>
+        </div>
+
+        <!-- 說明與操作 -->
+        <div class="space-y-4">
+            <div class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg">
+                <strong class="text-slate-700 dark:text-slate-200">原理：</strong> 
+                此 ID 是透過 <code>OfflineAudioContext</code> 運算生成的。它不是隨機數，而是根據您手機/電腦音訊晶片的物理特性生成的。即便您清除 Cookie，只要硬體不變，這組 ID 通常會保持一致。
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <button 
+                    @click="generateFingerprint" 
+                    :disabled="loading"
+                    class="flex items-center justify-center space-x-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold py-3 px-4 rounded-xl transition duration-200 hover:opacity-90 disabled:opacity-50"
+                >
+                    <span>重新檢測</span>
+                </button>
+                <button 
+                    @click="clearAndReload"
+                    class="flex items-center justify-center space-x-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold py-3 px-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition duration-200"
+                >
+                    <span>清除重整</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 狀態通知 -->
+        <transition name="fade">
+            <div v-if="showToast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-full text-sm shadow-2xl z-50">
+                ID 已複製到剪貼簿
+            </div>
+        </transition>
+    </div>
+</div>
+
+<script>
+    const { createApp, ref, onMounted } = Vue;
+
+    createApp({
+        setup() {
+            const fingerprint = ref(null);
+            const loading = ref(false);
+            const copyStatus = ref('複製 ID');
+            const showToast = ref(false);
+
+            const generateAudioFingerprint = () => {
+                return new Promise((resolve, reject) => {
+                    try {
+                        const AudioContext = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+                        if (!AudioContext) throw new Error('Not supported');
+
+                        const context = new AudioContext(1, 44100, 44100);
+                        const oscillator = context.createOscillator();
+                        oscillator.type = 'triangle';
+                        oscillator.frequency.setValueAtTime(10000, context.currentTime);
+
+                        const compressor = context.createDynamicsCompressor();
+                        compressor.threshold.setValueAtTime(-50, context.currentTime);
+                        compressor.knee.setValueAtTime(40, context.currentTime);
+                        compressor.ratio.setValueAtTime(12, context.currentTime);
+                        compressor.attack.setValueAtTime(0, context.currentTime);
+                        compressor.release.setValueAtTime(0.25, context.currentTime);
+
+                        oscillator.connect(compressor);
+                        compressor.connect(context.destination);
+
+                        oscillator.start(0);
+                        context.startRendering().then((buffer) => {
+                            const data = buffer.getChannelData(0);
+                            const hash = processAudioData(data);
+                            resolve(hash);
+                        }).catch(reject);
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            };
+
+            const processAudioData = (data) => {
+                let sub = 0;
+                for (let i = 500; i < 1000; i++) {
+                    sub += Math.abs(data[i]);
+                }
+                const raw = `${sub}_${data[200]}_${data.length}`;
+                const hashStr = btoa(raw).replace(/[+/=]/g, '').toUpperCase();
+                return hashStr.substring(0, 4) + '-' + hashStr.substring(4, 8) + '-' + hashStr.substring(8, 12);
+            };
+
+            const generateFingerprint = async () => {
+                loading.value = true;
+                try {
+                    fingerprint.value = await generateAudioFingerprint();
+                } catch (err) {
+                    console.error('ID Generation Failed:', err);
+                } finally {
+                    setTimeout(() => { loading.value = false; }, 500);
+                }
+            };
+
+            const copyToClipboard = () => {
+                if (!fingerprint.value) return;
+                const el = document.createElement('textarea');
+                el.value = fingerprint.value;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+
+                copyStatus.value = '已複製！';
+                showToast.value = true;
+                setTimeout(() => { 
+                    copyStatus.value = '複製 ID'; 
+                    showToast.value = false;
+                }, 2000);
+            };
+
+            const clearAndReload = () => {
+                fingerprint.value = null;
+                generateFingerprint();
+            };
+
+            onMounted(() => {
+                generateFingerprint();
+            });
+
+            return {
+                fingerprint,
+                loading,
+                copyStatus,
+                showToast,
+                generateFingerprint,
+                copyToClipboard,
+                clearAndReload
+            };
+        }
+    }).mount('#app');
+</script>
+
+</body>
+</html>
